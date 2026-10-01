@@ -1,5 +1,5 @@
 """
-Part 1: Reading and cleaning the Dirty Cafe Sales dataset.
+Cafe sales project: reading, cleaning and statistics for the Dirty Cafe Sales dataset.
 Dataset: https://www.kaggle.com/datasets/ahmedmohamed2003/cafe-sales-dirty-data-for-cleaning-training
 """
 
@@ -10,6 +10,7 @@ import pandas as pd
 
 RAW_PATH = Path("data/raw/dirty_cafe_sales.csv")
 CLEAN_PATH = Path("data/clean/cafe_sales_clean.csv")
+RESULTS_DIR = Path("results")
 
 MENU = {
     "Coffee": 2.0, "Tea": 1.5, "Sandwich": 4.0, "Salad": 5.0,
@@ -77,10 +78,84 @@ def save_data(df: pd.DataFrame, path: Path = CLEAN_PATH) -> None:
     print(f"\nSaved {len(df)} clean rows to {path}")
 
 
+# ---------- Statistics ----------
+
+def add_date_parts(df: pd.DataFrame) -> pd.DataFrame:
+    """Add month and weekday columns used by the statistics."""
+    df = df.copy()
+    df["month"] = df["transaction_date"].dt.to_period("M").astype(str)
+    df["weekday"] = df["transaction_date"].dt.day_name()
+    return df
+
+
+def overall_summary(df: pd.DataFrame) -> pd.Series:
+    """Key headline numbers for the whole dataset."""
+    return pd.Series({
+        "transactions": len(df),
+        "total_revenue": df["total_spent"].sum(),
+        "items_sold": df["quantity"].sum(),
+        "avg_transaction_value": df["total_spent"].mean(),
+        "median_transaction_value": df["total_spent"].median(),
+        "first_date": df["transaction_date"].min().date(),
+        "last_date": df["transaction_date"].max().date(),
+    })
+
+
+def group_stats(df: pd.DataFrame, column: str) -> pd.DataFrame:
+    """Transactions, items sold, revenue and revenue share for each group."""
+    stats = df.groupby(column).agg(
+        transactions=("transaction_id", "count"),
+        items_sold=("quantity", "sum"),
+        revenue=("total_spent", "sum"),
+        avg_transaction=("total_spent", "mean"),
+    )
+    stats["revenue_share_%"] = 100 * stats["revenue"] / stats["revenue"].sum()
+    return stats.sort_values("revenue", ascending=False).round(2)
+
+
+def monthly_stats(df: pd.DataFrame) -> pd.DataFrame:
+    """Revenue and transactions per month, in date order."""
+    return group_stats(df, "month").sort_index()
+
+
+def weekday_stats(df: pd.DataFrame) -> pd.DataFrame:
+    """Revenue and transactions per day of the week, Monday to Sunday."""
+    order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    return group_stats(df, "weekday").reindex(order)
+
+
+def print_table(title: str, table) -> None:
+    print(f"\n=== {title} ===")
+    print(table.to_string())
+
+
+def run_statistics(df: pd.DataFrame) -> None:
+    """Print all statistics and save them as CSV files in the results folder."""
+    df = add_date_parts(df)
+    RESULTS_DIR.mkdir(exist_ok=True)
+
+    summary = overall_summary(df)
+    print_table("Overall summary", summary)
+    print_table("Numeric columns", df[["quantity", "price_per_unit", "total_spent"]].describe().round(2))
+
+    tables = {
+        "by_item": group_stats(df, "item"),
+        "by_payment_method": group_stats(df, "payment_method"),
+        "by_location": group_stats(df, "location"),
+        "by_month": monthly_stats(df),
+        "by_weekday": weekday_stats(df),
+    }
+    for name, table in tables.items():
+        print_table(name.replace("_", " ").title(), table)
+        table.to_csv(RESULTS_DIR / f"stats_{name}.csv")
+
+    summary.to_csv(RESULTS_DIR / "stats_overall.csv", header=["value"])
+    print(f"\nSaved all statistics tables to the '{RESULTS_DIR}' folder")
+
+
 if __name__ == "__main__":
     raw_df = load_data()
     clean_df = clean_data(raw_df)
     save_data(clean_df)
-    print("\nPreview:")
-    print(clean_df.head())
-    print(clean_df.dtypes)
+
+    run_statistics(clean_df)

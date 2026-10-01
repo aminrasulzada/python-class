@@ -1,0 +1,5 @@
+payment_method,transactions,items_sold,revenue,avg_transaction,revenue_share_%
+Unknown,2870,8620,24846.0,8.66,31.04
+Cash,2051,6230,18466.0,9.0,23.07
+Digital Wallet,2086,6321,18415.0,8.83,23.01
+Credit Card,2057,6187,18314.5,8.9,22.88
